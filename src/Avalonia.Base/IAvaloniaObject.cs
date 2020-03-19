@@ -26,6 +26,22 @@ namespace Avalonia
         void ClearValue<T>(DirectPropertyBase<T> property);
 
         /// <summary>
+        /// Gets a listener for an <see cref="AvaloniaProperty"/> value.
+        /// </summary>
+        /// <typeparam name="T">The type of the property.</typeparam>
+        /// <param name="property">The property.</param>
+        /// <returns>The listener observable.</returns>
+        IObservable<AvaloniaPropertyChange<T>> Listen<T>(StyledPropertyBase<T> property);
+
+        /// <summary>
+        /// Gets a listener for an <see cref="AvaloniaProperty"/> value.
+        /// </summary>
+        /// <typeparam name="T">The type of the property.</typeparam>
+        /// <param name="property">The property.</param>
+        /// <returns>The listener observable.</returns>
+        IObservable<AvaloniaPropertyChange<T>> Listen<T>(DirectPropertyBase<T> property);
+
+        /// <summary>
         /// Gets a <see cref="AvaloniaProperty"/> value.
         /// </summary>
         /// <typeparam name="T">The type of the property.</typeparam>

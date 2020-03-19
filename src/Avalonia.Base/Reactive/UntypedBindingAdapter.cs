@@ -15,7 +15,7 @@ namespace Avalonia.Reactive
         public UntypedBindingAdapter(IObservable<BindingValue<T>> source) => _source = source;
         public void OnCompleted() => PublishCompleted();
         public void OnError(Exception error) => PublishError(error);
-        public void OnNext(BindingValue<T> value) => value.ToUntyped();
+        public void OnNext(BindingValue<T> value) => PublishNext(value.ToUntyped());
         protected override void Subscribed() => _subscription = _source.Subscribe(this);
         protected override void Unsubscribed() => _subscription?.Dispose();
     }

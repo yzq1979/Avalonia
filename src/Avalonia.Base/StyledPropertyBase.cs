@@ -239,6 +239,11 @@ namespace Avalonia
             o.InheritanceParentChanged(this, oldParent);
         }
 
+        internal override IObservable<object> RouteListen(IAvaloniaObject o)
+        {
+            return new UntypedBindingAdapter<TValue>((AvaloniaPropertyListener<TValue>)o.Listen(this));
+        }
+
         private object GetDefaultBoxedValue(Type type)
         {
             Contract.Requires<ArgumentNullException>(type != null);

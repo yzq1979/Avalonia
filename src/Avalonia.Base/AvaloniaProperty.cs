@@ -524,6 +524,12 @@ namespace Avalonia
         internal abstract void RouteInheritanceParentChanged(AvaloniaObject o, IAvaloniaObject oldParent);
 
         /// <summary>
+        /// Routes an untyped Listen call to a typed call.
+        /// </summary>
+        /// <param name="o">The object instance.</param>
+        internal abstract IObservable<object> RouteListen(IAvaloniaObject o);
+
+        /// <summary>
         /// Overrides the metadata for the property on the specified type.
         /// </summary>
         /// <param name="type">The type.</param>

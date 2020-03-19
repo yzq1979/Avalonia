@@ -41,7 +41,7 @@ namespace Avalonia
             Contract.Requires<ArgumentNullException>(o != null);
             Contract.Requires<ArgumentNullException>(property != null);
 
-            return new AvaloniaPropertyObservable<object>(o, property);
+            return property.RouteListen(o);
         }
 
         /// <summary>
@@ -62,7 +62,16 @@ namespace Avalonia
             Contract.Requires<ArgumentNullException>(o != null);
             Contract.Requires<ArgumentNullException>(property != null);
 
-            return new AvaloniaPropertyObservable<T>(o, property);
+            if (property is StyledPropertyBase<T> styled)
+            {
+                return (IObservable<T>)o.Listen(styled);
+            }
+            else if (property is DirectPropertyBase<T> direct)
+            {
+                return (IObservable<T>)o.Listen(direct);
+            }
+
+            throw new NotImplementedException();
         }
 
         /// <summary>

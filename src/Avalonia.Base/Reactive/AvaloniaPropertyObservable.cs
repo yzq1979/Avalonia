@@ -1,65 +1,48 @@
 ﻿using System;
+using Avalonia.Data;
 
 namespace Avalonia.Reactive
 {
-    internal class AvaloniaPropertyObservable<T> : LightweightObservableBase<T>, IDescription
+    internal class AvaloniaPropertyObservable<T> : LightweightObservableBase<T>,
+        IDescription,
+        IObserver<BindingValue<T>>
     {
-        private readonly WeakReference<IAvaloniaObject> _target;
-        private readonly AvaloniaProperty _property;
+        private readonly IObservable<BindingValue<T>> _listener;
+        private IDisposable _subscription;
         private T _value;
 
-        public AvaloniaPropertyObservable(
-            IAvaloniaObject target,
-            AvaloniaProperty property)
+        public AvaloniaPropertyObservable(IObservable<BindingValue<T>> listener)
         {
-            _target = new WeakReference<IAvaloniaObject>(target);
-            _property = property;
+            _listener = listener;
         }
 
-        public string Description => $"{_target.GetType().Name}.{_property.Name}";
+        public string Description => ((IDescription)_listener).Description;
+
+        void IObserver<BindingValue<T>>.OnCompleted() => PublishCompleted();
+        void IObserver<BindingValue<T>>.OnError(Exception error) => PublishError(error);
+        
+        void IObserver<BindingValue<T>>.OnNext(BindingValue<T> value)
+        {
+            _value = value.Value;
+            PublishNext(_value);
+        }
 
         protected override void Initialize()
         {
-            if (_target.TryGetTarget(out var target))
-            {
-                _value = (T)target.GetValue(_property);
-                target.PropertyChanged += PropertyChanged;
-            }
+            _subscription = _listener.Subscribe(this);
         }
 
         protected override void Deinitialize()
         {
-            if (_target.TryGetTarget(out var target))
-            {
-                target.PropertyChanged -= PropertyChanged;
-            }
+            _subscription.Dispose();
+            _subscription = null;
         }
 
         protected override void Subscribed(IObserver<T> observer, bool first)
         {
-            observer.OnNext(_value);
-        }
-
-        private void PropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
-        {
-            if (e.Property == _property)
+            if (!first)
             {
-                T newValue;
-
-                if (e is AvaloniaPropertyChangedEventArgs<T> typed)
-                {
-                    newValue = typed.Sender.GetValue(typed.Property);
-                }
-                else
-                {
-                    newValue = (T)e.Sender.GetValue(e.Property);
-                }
-
-                if (!Equals(newValue, _value))
-                {
-                    _value = (T)newValue;
-                    PublishNext(_value);
-                }
+                observer.OnNext(_value);
             }
         }
     }

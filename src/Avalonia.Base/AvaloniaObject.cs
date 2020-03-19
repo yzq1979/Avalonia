@@ -5,7 +5,9 @@ using Avalonia.Data;
 using Avalonia.Diagnostics;
 using Avalonia.Logging;
 using Avalonia.PropertyStore;
+using Avalonia.Reactive;
 using Avalonia.Threading;
+using Avalonia.Utilities;
 
 namespace Avalonia
 {
@@ -23,7 +25,7 @@ namespace Avalonia
         private EventHandler<AvaloniaPropertyChangedEventArgs> _propertyChanged;
         private List<IAvaloniaObject> _inheritanceChildren;
         private ValueStore _values;
-        private ValueStore Values => _values ?? (_values = new ValueStore(this));
+        private AvaloniaPropertyValueStore<object> _listeners;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AvaloniaObject"/> class.
@@ -124,6 +126,8 @@ namespace Avalonia
                 this.Bind(binding.Property, sourceBinding);
             }
         }
+
+        private ValueStore Values => _values ?? (_values = new ValueStore(this));
 
         public bool CheckAccess() => Dispatcher.UIThread.CheckAccess();
 
@@ -287,6 +291,50 @@ namespace Avalonia
             VerifyAccess();
 
             return _values?.IsSet(property) ?? false;
+        }
+
+        /// <summary>
+        /// Gets a listener for an <see cref="AvaloniaProperty"/> value.
+        /// </summary>
+        /// <typeparam name="T">The type of the property.</typeparam>
+        /// <param name="property">The property.</param>
+        /// <returns>The listener observable.</returns>
+        public IObservable<AvaloniaPropertyChange<T>> Listen<T>(StyledPropertyBase<T> property)
+        {
+            property = property ?? throw new ArgumentNullException(nameof(property));
+
+            _listeners ??= new AvaloniaPropertyValueStore<object>();
+
+            if (_listeners.TryGetValue(property, out var existing))
+            {
+                return (AvaloniaPropertyListener<T>)existing;
+            }
+
+            var listener = AvaloniaPropertyListener<T>.Create(this, property);
+            _listeners.AddValue(property, listener);
+            return listener;
+        }
+
+        /// <summary>
+        /// Gets a listener for an <see cref="AvaloniaProperty"/> value.
+        /// </summary>
+        /// <typeparam name="T">The type of the property.</typeparam>
+        /// <param name="property">The property.</param>
+        /// <returns>The listener observable.</returns>
+        public IObservable<AvaloniaPropertyChange<T>> Listen<T>(DirectPropertyBase<T> property)
+        {
+            property = property ?? throw new ArgumentNullException(nameof(property));
+
+            _listeners ??= new AvaloniaPropertyValueStore<object>();
+
+            if (_listeners.TryGetValue(property, out var existing))
+            {
+                return (AvaloniaPropertyListener<T>)existing;
+            }
+
+            var listener = AvaloniaPropertyListener<T>.Create(this, property);
+            _listeners.AddValue(property, listener);
+            return listener;
         }
 
         /// <summary>
@@ -626,6 +674,17 @@ namespace Avalonia
                 if (hasChanged)
                 {
                     property.NotifyChanged(e);
+                }
+
+                if (_listeners != null && _listeners.TryGetValue(property, out var listener))
+                {
+                    var change = new AvaloniaPropertyChange<T>(
+                        this,
+                        property,
+                        oldValue,
+                        newValue,
+                        priority);
+                    ((AvaloniaPropertyListener<T>)listener).Signal(change);
                 }
 
                 _propertyChanged?.Invoke(this, e);
