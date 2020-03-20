@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net.Http.Headers;
 using Avalonia.Data;
 using Avalonia.PropertyStore;
 using Avalonia.Utilities;
@@ -77,6 +78,7 @@ namespace Avalonia
                 throw new ArgumentException($"{value} is not a valid value for '{property.Name}.");
             }
 
+            var change = new AvaloniaPropertyChange<T>(_owner, property, default, value, priority);
             IDisposable? result = null;
 
             if (_values.TryGetValue(property, out var slot))
@@ -93,13 +95,13 @@ namespace Avalonia
             else if (priority == BindingPriority.LocalValue)
             {
                 _values.AddValue(property, new LocalValueEntry<T>(value));
-                _sink.ValueChanged(property, priority, default, value);
+                _sink.ValueChanged(change);
             }
             else
             {
                 var entry = new ConstantValueEntry<T>(property, value, priority, this);
                 _values.AddValue(property, entry);
-                _sink.ValueChanged(property, priority, default, value);
+                _sink.ValueChanged(change);
                 result = entry;
             }
 
@@ -151,11 +153,12 @@ namespace Avalonia
                     {
                         var old = TryGetValue(property, out var value) ? value : default;
                         _values.Remove(property);
-                        _sink.ValueChanged(
+                        _sink.ValueChanged(new AvaloniaPropertyChange<T>(
+                            _owner,
                             property,
-                            BindingPriority.Unset,
                             old,
-                            BindingValue<T>.Unset);
+                            default,
+                            BindingPriority.Unset));
                     }
                 }
             }
@@ -186,13 +189,9 @@ namespace Avalonia
             return null;
         }
 
-        void IValueSink.ValueChanged<T>(
-            StyledPropertyBase<T> property,
-            BindingPriority priority,
-            Optional<T> oldValue,
-            BindingValue<T> newValue)
+        void IValueSink.ValueChanged<T>(in AvaloniaPropertyChange<T> change)
         {
-            _sink.ValueChanged(property, priority, oldValue, newValue);
+            _sink.ValueChanged(change);
         }
 
         void IValueSink.Completed<T>(
@@ -234,7 +233,12 @@ namespace Avalonia
                 {
                     var old = l.Value;
                     l.SetValue(value);
-                    _sink.ValueChanged(property, priority, old, value);
+                    _sink.ValueChanged(new AvaloniaPropertyChange<T>(
+                        _owner,
+                        property,
+                        old,
+                        value,
+                        priority));
                 }
                 else
                 {

@@ -108,13 +108,9 @@ namespace Avalonia.PropertyStore
 
         public void CoerceValue() => UpdateEffectiveValue();
 
-        void IValueSink.ValueChanged<TValue>(
-            StyledPropertyBase<TValue> property,
-            BindingPriority priority,
-            Optional<TValue> oldValue,
-            BindingValue<TValue> newValue)
+        void IValueSink.ValueChanged<TValue>(in AvaloniaPropertyChange<TValue> change)
         {
-            if (priority == BindingPriority.LocalValue)
+            if (change.Priority == BindingPriority.LocalValue)
             {
                 _localValue = default;
             }
@@ -193,7 +189,12 @@ namespace Avalonia.PropertyStore
             {
                 var old = Value;
                 Value = value;
-                _sink.ValueChanged(Property, ValuePriority, old, value);
+                _sink.ValueChanged(new AvaloniaPropertyChange<T>(
+                    _owner,
+                    Property,
+                    old,
+                    value,
+                    ValuePriority));
             }
         }
     }

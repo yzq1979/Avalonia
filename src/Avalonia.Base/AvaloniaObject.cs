@@ -506,20 +506,17 @@ namespace Avalonia
             return _propertyChanged?.GetInvocationList();
         }
 
-        void IValueSink.ValueChanged<T>(
-            StyledPropertyBase<T> property,
-            BindingPriority priority,
-            Optional<T> oldValue,
-            BindingValue<T> newValue)
+        void IValueSink.ValueChanged<T>(in AvaloniaPropertyChange<T> change)
         {
-            oldValue = oldValue.HasValue ? oldValue : GetInheritedOrDefault(property);
-            newValue = newValue.HasValue ? newValue : newValue.WithValue(GetInheritedOrDefault(property));
+            var property = (StyledPropertyBase<T>)change.Property;
+            var oldValue = change.OldValue.HasValue ? change.OldValue : GetInheritedOrDefault<T>(property);
+            var newValue = change.NewValue.HasValue ? change.NewValue : change.NewValue.WithValue(GetInheritedOrDefault(property));
 
             LogIfError(property, newValue);
 
             if (!EqualityComparer<T>.Default.Equals(oldValue.Value, newValue.Value))
             {
-                RaisePropertyChanged(property, oldValue, newValue, priority);
+                RaisePropertyChanged(property, oldValue, newValue, change.Priority);
 
                 Logger.TryGet(LogEventLevel.Verbose)?.Log(
                     LogArea.Property,
@@ -528,7 +525,7 @@ namespace Avalonia
                     property,
                     oldValue,
                     newValue,
-                    (BindingPriority)priority);
+                    change.Priority);
             }
         }
 
@@ -537,7 +534,13 @@ namespace Avalonia
             IPriorityValueEntry entry,
             Optional<T> oldValue) 
         {
-            ((IValueSink)this).ValueChanged(property, BindingPriority.Unset, oldValue, default);
+            var change = new AvaloniaPropertyChange<T>(
+                this,
+                property,
+                oldValue,
+                default,
+                BindingPriority.Unset);
+            ((IValueSink)this).ValueChanged(change);
         }
 
         /// <summary>

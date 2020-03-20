@@ -10,7 +10,7 @@ namespace Avalonia.Base.UnitTests
 {
     public class PriorityValueTests
     {
-        private static readonly IValueSink NullSink = Mock.Of<IValueSink>();
+        private static readonly IValueSink NullSink = new MockSink();
         private static readonly IAvaloniaObject Owner = Mock.Of<IAvaloniaObject>();
         private static readonly StyledProperty<string> TestProperty = new StyledProperty<string>(
             "Test",
@@ -238,6 +238,17 @@ namespace Avalonia.Base.UnitTests
             }
 
             public void OnCompleted() => _observer.OnCompleted();
+        }
+
+        private class MockSink : IValueSink
+        {
+            public void Completed<T>(StyledPropertyBase<T> property, IPriorityValueEntry entry, Optional<T> oldValue)
+            {
+            }
+
+            public void ValueChanged<T>(in AvaloniaPropertyChange<T> change)
+            {
+            }
         }
     }
 }
