@@ -48,21 +48,24 @@ namespace Avalonia
         {
             if (_values.TryGetValue(property, out var slot))
             {
-                return slot.Value.HasValue;
+                return slot.GetValue().HasValue;
             }
 
             return false;
         }
 
-        public bool TryGetValue<T>(StyledPropertyBase<T> property, out T value)
+        public bool TryGetValue<T>(
+            StyledPropertyBase<T> property,
+            bool includeAnimations,
+            out T value)
         {
             if (_values.TryGetValue(property, out var slot))
             {
-                var v = (IValue<T>)slot;
+                var v = ((IValue<T>)slot).GetValue(includeAnimations);
 
-                if (v.Value.HasValue)
+                if (v.HasValue)
                 {
-                    value = v.Value.Value;
+                    value = v.Value;
                     return true;
                 }
             }
@@ -151,7 +154,7 @@ namespace Avalonia
 
                     if (remove)
                     {
-                        var old = TryGetValue(property, out var value) ? value : default;
+                        var old = TryGetValue(property, true, out var value) ? value : default;
                         _values.Remove(property);
                         _sink.ValueChanged(new AvaloniaPropertyChange<T>(
                             _owner,
@@ -179,9 +182,10 @@ namespace Avalonia
         {
             if (_values.TryGetValue(property, out var slot))
             {
+                var slotValue = slot.GetValue();
                 return new Diagnostics.AvaloniaPropertyValue(
                     property,
-                    slot.Value.HasValue ? slot.Value.Value : AvaloniaProperty.UnsetValue,
+                    slotValue.HasValue ? slotValue.Value : AvaloniaProperty.UnsetValue,
                     slot.ValuePriority,
                     null);
             }
@@ -231,7 +235,7 @@ namespace Avalonia
             {
                 if (priority == BindingPriority.LocalValue)
                 {
-                    var old = l.Value;
+                    var old = l.GetValue(true);
                     l.SetValue(value);
                     _sink.ValueChanged(new AvaloniaPropertyChange<T>(
                         _owner,

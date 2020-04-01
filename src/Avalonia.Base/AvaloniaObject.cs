@@ -264,6 +264,20 @@ namespace Avalonia
         }
 
         /// <summary>
+        /// Gets a <see cref="AvaloniaProperty"/> value, disregarding any possible animated value.
+        /// </summary>
+        /// <typeparam name="T">The type of the property.</typeparam>
+        /// <param name="property">The property.</param>
+        /// <returns>The value.</returns>
+        public T GetAnimationBaseValue<T>(StyledPropertyBase<T> property)
+        {
+            property = property ?? throw new ArgumentNullException(nameof(property));
+            VerifyAccess();
+
+            return GetValueOrInheritedOrDefault(property, false);
+        }
+
+        /// <summary>
         /// Checks whether a <see cref="AvaloniaProperty"/> is animating.
         /// </summary>
         /// <param name="property">The property.</param>
@@ -298,8 +312,13 @@ namespace Avalonia
         /// </summary>
         /// <typeparam name="T">The type of the property.</typeparam>
         /// <param name="property">The property.</param>
+        /// <param name="includeAnimations">
+        /// Whether to include property changes caused by animations.
+        /// </param>
         /// <returns>The listener observable.</returns>
-        public IObservable<AvaloniaPropertyChange<T>> Listen<T>(StyledPropertyBase<T> property)
+        public IObservable<AvaloniaPropertyChange<T>> Listen<T>(
+            StyledPropertyBase<T> property,
+            bool includeAnimations = true)
         {
             property = property ?? throw new ArgumentNullException(nameof(property));
 
@@ -307,12 +326,12 @@ namespace Avalonia
 
             if (_listeners.TryGetValue(property, out var existing))
             {
-                return (AvaloniaPropertyListener<T>)existing;
+                return ((AvaloniaPropertyListener<T>)existing).Get(includeAnimations);
             }
 
             var listener = AvaloniaPropertyListener<T>.Create(this, property);
             _listeners.AddValue(property, listener);
-            return listener;
+            return listener.Get(includeAnimations);
         }
 
         /// <summary>
@@ -320,8 +339,13 @@ namespace Avalonia
         /// </summary>
         /// <typeparam name="T">The type of the property.</typeparam>
         /// <param name="property">The property.</param>
+        /// <param name="includeAnimations">
+        /// Whether to include property changes caused by animations.
+        /// </param>
         /// <returns>The listener observable.</returns>
-        public IObservable<AvaloniaPropertyChange<T>> Listen<T>(DirectPropertyBase<T> property)
+        public IObservable<AvaloniaPropertyChange<T>> Listen<T>(
+            DirectPropertyBase<T> property,
+            bool includeAnimations = true)
         {
             property = property ?? throw new ArgumentNullException(nameof(property));
 
@@ -329,12 +353,12 @@ namespace Avalonia
 
             if (_listeners.TryGetValue(property, out var existing))
             {
-                return (AvaloniaPropertyListener<T>)existing;
+                return ((AvaloniaPropertyListener<T>)existing).Get(includeAnimations);
             }
 
             var listener = AvaloniaPropertyListener<T>.Create(this, property);
             _listeners.AddValue(property, listener);
-            return listener;
+            return listener.Get(includeAnimations);
         }
 
         /// <summary>
@@ -516,7 +540,13 @@ namespace Avalonia
 
             if (!EqualityComparer<T>.Default.Equals(oldValue.Value, newValue.Value))
             {
-                RaisePropertyChanged(property, oldValue, newValue, change.Priority);
+                RaisePropertyChanged(new AvaloniaPropertyChange<T>(
+                    this,
+                    property,
+                    oldValue,
+                    newValue,
+                    change.Priority,
+                    change.IsActiveValueChange));
 
                 Logger.TryGet(LogEventLevel.Verbose)?.Log(
                     LogArea.Property,
@@ -651,68 +681,12 @@ namespace Avalonia
             BindingValue<T> newValue,
             BindingPriority priority = BindingPriority.LocalValue)
         {
-            property = property ?? throw new ArgumentNullException(nameof(property));
-
-            VerifyAccess();
-
-            property.Notifying?.Invoke(this, true);
-
-            try
-            {
-                AvaloniaPropertyChangedEventArgs<T> e = null;
-                var hasChanged = property.HasChangedSubscriptions;
-
-                if (hasChanged || _propertyChanged != null)
-                {
-                    e = new AvaloniaPropertyChangedEventArgs<T>(
-                        this,
-                        property,
-                        oldValue,
-                        newValue,
-                        priority);
-                }
-
-                OnPropertyChanged(property, oldValue, newValue, priority);
-
-                if (hasChanged)
-                {
-                    property.NotifyChanged(e);
-                }
-
-                if (_listeners != null && _listeners.TryGetValue(property, out var listener))
-                {
-                    var change = new AvaloniaPropertyChange<T>(
-                        this,
-                        property,
-                        oldValue,
-                        newValue,
-                        priority);
-                    ((AvaloniaPropertyListener<T>)listener).Signal(change);
-                }
-
-                _propertyChanged?.Invoke(this, e);
-
-                if (_inpcChanged != null)
-                {
-                    var inpce = new PropertyChangedEventArgs(property.Name);
-                    _inpcChanged(this, inpce);
-                }
-
-                if (property.Inherits && _inheritanceChildren != null)
-                {
-                    foreach (var child in _inheritanceChildren)
-                    {
-                        child.InheritedPropertyChanged(
-                            property,
-                            oldValue,
-                            newValue.ToOptional());
-                    }
-                }
-            }
-            finally
-            {
-                property.Notifying?.Invoke(this, false);
-            }
+            RaisePropertyChanged(new AvaloniaPropertyChange<T>(
+                this,
+                property,
+                oldValue,
+                newValue,
+                priority));
         }
 
         /// <summary>
@@ -751,7 +725,9 @@ namespace Avalonia
             return property.GetDefaultValue(GetType());
         }
 
-        private T GetValueOrInheritedOrDefault<T>(StyledPropertyBase<T> property)
+        private T GetValueOrInheritedOrDefault<T>(
+            StyledPropertyBase<T> property,
+            bool includeAnimations = true)
         {
             var o = this;
             var inherits = property.Inherits;
@@ -761,7 +737,7 @@ namespace Avalonia
             {
                 var values = o._values;
 
-                if (values?.TryGetValue(property, out value) == true)
+                if (values?.TryGetValue(property, includeAnimations, out value) == true)
                 {
                     return value;
                 }
@@ -775,6 +751,64 @@ namespace Avalonia
             }
 
             return property.GetDefaultValue(GetType());
+        }
+
+        protected internal void RaisePropertyChanged<T>(in AvaloniaPropertyChange<T> change)
+        {
+            VerifyAccess();
+
+            change.Property.Notifying?.Invoke(this, true);
+
+            try
+            {
+                AvaloniaPropertyChangedEventArgs<T> e = null;
+                var hasChanged = change.Property.HasChangedSubscriptions;
+
+                if (hasChanged || _propertyChanged != null)
+                {
+                    e = new AvaloniaPropertyChangedEventArgs<T>(
+                        this,
+                        change.Property,
+                        change.OldValue,
+                        change.NewValue,
+                        change.Priority);
+                }
+
+                OnPropertyChanged(change.Property, change.OldValue, change.NewValue, change.Priority);
+
+                if (hasChanged)
+                {
+                    change.Property.NotifyChanged(e);
+                }
+
+                if (_listeners != null && _listeners.TryGetValue(change.Property, out var listener))
+                {
+                    ((AvaloniaPropertyListener<T>)listener).Signal(change);
+                }
+
+                _propertyChanged?.Invoke(this, e);
+
+                if (_inpcChanged != null)
+                {
+                    var inpce = new PropertyChangedEventArgs(change.Property.Name);
+                    _inpcChanged(this, inpce);
+                }
+
+                if (change.Property.Inherits && _inheritanceChildren != null)
+                {
+                    foreach (var child in _inheritanceChildren)
+                    {
+                        child.InheritedPropertyChanged(
+                            change.Property,
+                            change.OldValue,
+                            change.NewValue.ToOptional());
+                    }
+                }
+            }
+            finally
+            {
+                change.Property.Notifying?.Invoke(this, false);
+            }
         }
 
         /// <summary>

@@ -9,7 +9,7 @@ namespace Avalonia.PropertyStore
     /// </summary>
     internal interface IValue
     {
-        Optional<object> Value { get; }
+        Optional<object> GetValue();
         BindingPriority ValuePriority { get; }
     }
 
@@ -19,6 +19,6 @@ namespace Avalonia.PropertyStore
     /// <typeparam name="T">The property type.</typeparam>
     internal interface IValue<T> : IValue
     {
-        new Optional<T> Value { get; }
+        Optional<T> GetValue(bool includeAnimations);
     }
 }

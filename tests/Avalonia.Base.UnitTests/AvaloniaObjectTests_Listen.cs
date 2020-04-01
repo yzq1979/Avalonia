@@ -3,7 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using Avalonia.Data;
 using Xunit;
 
@@ -114,6 +116,107 @@ namespace Avalonia.Base.UnitTests
             target.SetValue(Class1.FooProperty, "newvalue");
 
             Assert.False(raised);
+        }
+
+        public class NoAnimation
+        {
+            [Fact]
+            public void Listen_Returns_Default_Value_Immediately_When_Only_Animated_Value_Present()
+            {
+                var target = new Class1();
+                var raised = 0;
+
+                target.SetValue(Class1.FooProperty, "a1", BindingPriority.Animation);
+
+                target.Listen(Class1.FooProperty, false).Subscribe(x =>
+                {
+                    Assert.Equal("foodefault", x.NewValue.Value);
+                    Assert.False(x.OldValue.HasValue);
+                    Assert.Equal(BindingPriority.Unset, x.Priority);
+                    Assert.True(x.IsActiveValueChange);
+                    Assert.False(x.IsOutdated);
+                    ++raised;
+                });
+
+                Assert.Equal(1, raised);
+            }
+
+            [Fact]
+            public void Listener_Fires_Only_On_Non_Animated_Property_Changes()
+            {
+                var target = new Class1();
+                var changes = new List<AvaloniaPropertyChange<string>>();
+
+                target.Listen(Class1.FooProperty, false).Skip(1).Subscribe(x => changes.Add(x));
+
+                target.SetValue(Class1.FooProperty, "a1", BindingPriority.Animation);
+                target.SetValue(Class1.FooProperty, "l1");
+                target.SetValue(Class1.FooProperty, "l2");
+                target.SetValue(Class1.FooProperty, "a2", BindingPriority.Animation);
+                target.SetValue(Class1.FooProperty, "l3");
+
+                Assert.Equal(new[] { "l1", "l2", "l3" }, changes.Select(x => x.NewValue.Value).ToList());
+                Assert.True(changes.All(x => !x.IsActiveValueChange));
+            }
+
+            [Fact]
+            public void Listener_Fires_Only_On_Non_Animated_Property_Changes_With_Binding_Added_Midway()
+            {
+                var target = new Class1();
+                var changes = new List<AvaloniaPropertyChange<string>>();
+                var style = new BehaviorSubject<BindingValue<string>>("s1");
+
+                target.Listen(Class1.FooProperty, false).Skip(1).Subscribe(x => changes.Add(x));
+
+                target.SetValue(Class1.FooProperty, "l1");
+                target.Bind(Class1.FooProperty, style, BindingPriority.Style);
+                target.SetValue(Class1.FooProperty, "a1", BindingPriority.Animation);
+                target.SetValue(Class1.FooProperty, "l2");
+                target.SetValue(Class1.FooProperty, "a2", BindingPriority.Animation);
+                target.SetValue(Class1.FooProperty, "l3");
+
+                Assert.Equal(new[] { "l1", "l2", "l3" }, changes.Select(x => x.NewValue.Value).ToList());
+                Assert.Equal(new[] { true, false, false }, changes.Select(x => x.IsActiveValueChange).ToList());
+            }
+
+            [Fact]
+            public void Listener_Fires_Only_On_Non_Animated_Binding_Property_Changes()
+            {
+                var target = new Class1();
+                var allChanges = new List<AvaloniaPropertyChange<string>>();
+                var nonAnimatedChanges = new List<AvaloniaPropertyChange<string>>();
+                var style = new Subject<BindingValue<string>>();
+                var animation = new Subject<BindingValue<string>>();
+                var templatedParent = new Subject<BindingValue<string>>();
+
+                target.Bind(Class1.FooProperty, style, BindingPriority.Style);
+                target.Bind(Class1.FooProperty, animation, BindingPriority.Animation);
+                target.Bind(Class1.FooProperty, templatedParent, BindingPriority.TemplatedParent);
+
+                target.Listen(Class1.FooProperty, true).Subscribe(x => allChanges.Add(x));
+                target.Listen(Class1.FooProperty, false).Subscribe(x => nonAnimatedChanges.Add(x));
+
+                style.OnNext("style1");
+                templatedParent.OnNext("tp1");
+                animation.OnNext("a1");
+                templatedParent.OnNext("tp2");
+                templatedParent.OnCompleted();
+                animation.OnNext("a2");
+                style.OnNext("style2");
+                style.OnCompleted();
+                animation.OnCompleted();
+
+                Assert.Equal(
+                    new[] { "foodefault", "style1", "tp1", "tp2", "style1", "style2", "foodefault" },
+                    nonAnimatedChanges.Select(x => x.NewValue.Value).ToList());
+                Assert.Equal(
+                    new[] { true, true, true, false, false, false, false },
+                    nonAnimatedChanges.Select(x => x.IsActiveValueChange).ToList());
+                Assert.Equal(
+                    new[] { "foodefault", "style1", "tp1", "a1", "a2", "foodefault" },
+                    allChanges.Select(x => x.NewValue.Value).ToList());
+                Assert.True(allChanges.All(x => x.IsActiveValueChange));
+            }
         }
 
         private class Class1 : AvaloniaObject

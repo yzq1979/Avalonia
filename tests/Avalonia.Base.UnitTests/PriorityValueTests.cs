@@ -30,7 +30,8 @@ namespace Avalonia.Base.UnitTests
                     BindingPriority.StyleTrigger,
                     NullSink));
 
-            Assert.Equal("1", target.Value.Value);
+            Assert.Equal("1", target.GetValue(true).Value);
+            Assert.Equal("1", target.GetValue(false).Value);
             Assert.Equal(BindingPriority.StyleTrigger, target.ValuePriority);
         }
 
@@ -61,7 +62,7 @@ namespace Avalonia.Base.UnitTests
 
             var result = target.Entries
                 .OfType<ConstantValueEntry<string>>()
-                .Select(x => x.Value.Value)
+                .Select(x => x.GetValue(true).Value)
                 .ToList();
 
             Assert.Equal(new[] { "1", "2" }, result);
@@ -184,7 +185,7 @@ namespace Avalonia.Base.UnitTests
             target.AddBinding(source2, BindingPriority.Style).Start();
             target.AddBinding(source3, BindingPriority.Style).Start();
 
-            Assert.Equal("1", target.Value.Value);
+            Assert.Equal("1", target.GetValue(true).Value);
         }
 
         [Fact]
@@ -196,7 +197,7 @@ namespace Avalonia.Base.UnitTests
             target.AddBinding(source1, BindingPriority.LocalValue).Start();
             target.SetValue("2", BindingPriority.LocalValue);
 
-            Assert.Equal("2", target.Value.Value);
+            Assert.Equal("2", target.GetValue(true).Value);
         }
 
         [Fact]
@@ -208,7 +209,7 @@ namespace Avalonia.Base.UnitTests
             target.AddBinding(source1, BindingPriority.Style).Start();
             target.SetValue("2", BindingPriority.LocalValue);
 
-            Assert.Equal("2", target.Value.Value);
+            Assert.Equal("2", target.GetValue(true).Value);
         }
 
         [Fact]
@@ -220,7 +221,39 @@ namespace Avalonia.Base.UnitTests
             target.AddBinding(source1, BindingPriority.Animation).Start();
             target.SetValue("2", BindingPriority.LocalValue);
 
-            Assert.Equal("1", target.Value.Value);
+            Assert.Equal("1", target.GetValue(true).Value);
+        }
+
+        [Fact]
+        public void NonAnimated_Value_Should_Be_Correct_1()
+        {
+            var target = new PriorityValue<string>(Owner, TestProperty, NullSink);
+            var source1 = new Source("1");
+            var source2 = new Source("2");
+            var source3 = new Source("3");
+
+            target.AddBinding(source1, BindingPriority.LocalValue).Start();
+            target.AddBinding(source2, BindingPriority.Style).Start();
+            target.AddBinding(source3, BindingPriority.Animation).Start();
+
+            Assert.Equal("3", target.GetValue(true).Value);
+            Assert.Equal("1", target.GetValue(false).Value);
+        }
+
+        [Fact]
+        public void NonAnimated_Value_Should_Be_Correct_2()
+        {
+            var target = new PriorityValue<string>(Owner, TestProperty, NullSink);
+            var source1 = new Source("1");
+            var source2 = new Source("2");
+            var source3 = new Source("3");
+
+            target.AddBinding(source1, BindingPriority.Animation).Start();
+            target.AddBinding(source2, BindingPriority.Style).Start();
+            target.AddBinding(source3, BindingPriority.Style).Start();
+
+            Assert.Equal("1", target.GetValue(true).Value);
+            Assert.Equal("3", target.GetValue(false).Value);
         }
 
         private class Source : IObservable<BindingValue<string>>

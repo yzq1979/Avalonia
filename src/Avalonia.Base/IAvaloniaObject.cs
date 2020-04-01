@@ -30,16 +30,26 @@ namespace Avalonia
         /// </summary>
         /// <typeparam name="T">The type of the property.</typeparam>
         /// <param name="property">The property.</param>
+        /// <param name="includeAnimations">
+        /// Whether to include property changes caused by animations.
+        /// </param>
         /// <returns>The listener observable.</returns>
-        IObservable<AvaloniaPropertyChange<T>> Listen<T>(StyledPropertyBase<T> property);
+        IObservable<AvaloniaPropertyChange<T>> Listen<T>(
+            StyledPropertyBase<T> property,
+            bool includeAnimations = true);
 
         /// <summary>
         /// Gets a listener for an <see cref="AvaloniaProperty"/> value.
         /// </summary>
         /// <typeparam name="T">The type of the property.</typeparam>
         /// <param name="property">The property.</param>
+        /// <param name="includeAnimations">
+        /// Whether to include property changes caused by animations.
+        /// </param>
         /// <returns>The listener observable.</returns>
-        IObservable<AvaloniaPropertyChange<T>> Listen<T>(DirectPropertyBase<T> property);
+        IObservable<AvaloniaPropertyChange<T>> Listen<T>(
+            DirectPropertyBase<T> property,
+            bool includeAnimations = true);
 
         /// <summary>
         /// Gets a <see cref="AvaloniaProperty"/> value.

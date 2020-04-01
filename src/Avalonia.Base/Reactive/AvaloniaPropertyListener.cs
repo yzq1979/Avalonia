@@ -14,15 +14,16 @@ namespace Avalonia.Reactive
         IObservable<T>,
         IDescription
     {
-        private readonly WeakReference<IAvaloniaObject> _owner;
+        private readonly WeakReference<AvaloniaObject> _owner;
+        private NonAnimatedProxy? _nonAnimated;
         private PooledQueue<AvaloniaPropertyChange<T>>? _queue;
         private object? _observer;
         private bool _isSignalling;
 
-        private AvaloniaPropertyListener(IAvaloniaObject owner)
+        private AvaloniaPropertyListener(AvaloniaObject owner)
         {
             owner = owner ?? throw new ArgumentNullException(nameof(owner));
-            _owner = new WeakReference<IAvaloniaObject>(owner);
+            _owner = new WeakReference<AvaloniaObject>(owner);
         }
 
         public string Description
@@ -42,6 +43,8 @@ namespace Avalonia.Reactive
 
         public abstract AvaloniaProperty<T> Property { get; }
 
+        public IObservable<AvaloniaPropertyChange<T>> NonAnimated => _nonAnimated ??= new NonAnimatedProxy(this);
+
         public static AvaloniaPropertyListener<T> Create(AvaloniaObject o, StyledPropertyBase<T> property)
         {
             return new Styled(o, property);
@@ -50,6 +53,11 @@ namespace Avalonia.Reactive
         public static AvaloniaPropertyListener<T> Create(AvaloniaObject o, DirectPropertyBase<T> property)
         {
             return new Direct(o, property);
+        }
+
+        public IObservable<AvaloniaPropertyChange<T>> Get(bool includeAnimations)
+        {
+            return includeAnimations ? this : NonAnimated;
         }
 
         public void Signal(AvaloniaPropertyChange<T> change)
@@ -80,8 +88,8 @@ namespace Avalonia.Reactive
 
         public IDisposable Subscribe(IObserver<T> observer)
         {
-            var result = SubscribeCore(observer);
-            var value = GetValue();
+            var result = SubscribeCore(observer, true);
+            var value = GetValue(true);
 
             if (value.HasValue)
             {
@@ -93,11 +101,18 @@ namespace Avalonia.Reactive
 
         public IDisposable Subscribe(IObserver<AvaloniaPropertyChange<T>> observer)
         {
-            var result = SubscribeCore(observer);
+            return Subscribe(observer, true);
+        }
+
+        public IDisposable Subscribe(
+            IObserver<AvaloniaPropertyChange<T>> observer,
+            bool includeAnimations)
+        {
+            var result = SubscribeCore(observer, includeAnimations);
 
             if (_owner.TryGetTarget(out var owner))
             {
-                var value = GetValue(owner);
+                var value = GetValue(owner, includeAnimations);
                 var change = new AvaloniaPropertyChange<T>(
                     owner,
                     Property,
@@ -109,11 +124,11 @@ namespace Avalonia.Reactive
 
             return result;
         }
-        
+
         public IDisposable Subscribe(IObserver<BindingValue<T>> observer)
         {
-            var result = SubscribeCore(observer);
-            var value = GetValue();
+            var result = SubscribeCore(observer, true);
+            var value = GetValue(true);
 
             if (value.HasValue)
             {
@@ -123,11 +138,11 @@ namespace Avalonia.Reactive
             return result;
         }
 
-        protected abstract T GetValue(IAvaloniaObject owner);
+        protected abstract T GetValue(AvaloniaObject owner, bool includeAnimations);
 
         private void SignalCore(AvaloniaPropertyChange<T> change)
         {
-            if (_observer is List<object> list)
+            if (_observer is List<ObserverEntry> list)
             {
                 foreach (var observer in list)
                 {
@@ -139,42 +154,55 @@ namespace Avalonia.Reactive
                     SignalCore(observer, change);
                 }
             }
-            else if (_observer is object)
+            else if (_observer is ObserverEntry e)
             {
-                SignalCore(_observer, change);
+                SignalCore(e, change);
             }
         }
 
-        private void SignalCore(object observer, AvaloniaPropertyChange<T> change)
+        private void SignalCore(ObserverEntry entry, AvaloniaPropertyChange<T> change)
         {
-            if (observer is IObserver<AvaloniaPropertyChange<T>> apc)
+            if (entry.Observer is IObserver<AvaloniaPropertyChange<T>> apc)
             {
-                apc.OnNext(change);
+                if (entry.IncludeAnimations)
+                {
+                    if (change.IsActiveValueChange)
+                    {
+                        apc.OnNext(change);
+                    }
+                }
+                else
+                {
+                    if (change.Priority > BindingPriority.Animation)
+                    {
+                        apc.OnNext(change);
+                    }
+                }
             }
-            else if (!change.IsOutdated)
+            else if (!change.IsOutdated && change.IsActiveValueChange)
             {
-                if (observer is IObserver<BindingValue<T>> bv)
+                if (entry.Observer is IObserver<BindingValue<T>> bv)
                 {
                     bv.OnNext(change.NewValue);
                 }
-                else if (observer is IObserver<T> t)
+                else if (entry.Observer is IObserver<T> t)
                 {
                     t.OnNext(change.NewValue.Value);
                 }
             }
         }
 
-        private Optional<T> GetValue()
+        private Optional<T> GetValue(bool includeAnimations)
         {
             if (_owner.TryGetTarget(out var owner))
             {
-                return GetValue(owner);
+                return GetValue(owner, includeAnimations);
             }
 
             return default;
         }
 
-        private Disposable SubscribeCore(object observer)
+        private IDisposable SubscribeCore(object observer, bool includeAnimations)
         {
             observer = observer ?? throw new ArgumentNullException(nameof(observer));
 
@@ -182,16 +210,18 @@ namespace Avalonia.Reactive
 
             if (_observer is null)
             {
-                _observer = observer;
+                _observer = new ObserverEntry(observer, includeAnimations);
             }
             else
             {
-                if (!(_observer is List<object> list))
+                if (!(_observer is List<ObserverEntry> list))
                 {
-                    _observer = list = new List<object> { _observer };
+                    var existing = (ObserverEntry)_observer;
+                    _observer = list = new List<ObserverEntry>();
+                    list.Add(existing);
                 }
 
-                list.Add(observer);
+                list.Add(new ObserverEntry(observer, includeAnimations));
             }
 
             return new Disposable(this, observer);
@@ -199,17 +229,36 @@ namespace Avalonia.Reactive
 
         private void Remove(object observer)
         {
-            if (_observer == observer)
+            if (_observer is ObserverEntry e && e.Observer == observer)
             {
                 _observer = null;
             }
-            else if (_observer is List<object> list)
+            else if (_observer is List<ObserverEntry> list)
             {
-                list.Remove(observer);
+                for (var i = 0; i < list.Count; ++i)
+                {
+                    if (list[i].Observer == observer)
+                    {
+                        list.RemoveAt(i);
+                        break;
+                    }
+                }
             }
         }
 
-        public class Disposable : IDisposable
+        private struct ObserverEntry
+        {
+            public ObserverEntry(object observer, bool includeAnimations)
+            {
+                Observer = observer;
+                IncludeAnimations = includeAnimations;
+            }
+
+            public object Observer { get; }
+            public bool IncludeAnimations { get; }
+        }
+
+        private class Disposable : IDisposable
         {
             private readonly AvaloniaPropertyListener<T> _owner;
             private readonly object _observer;
@@ -226,28 +275,54 @@ namespace Avalonia.Reactive
             }
         }
 
+        private class NonAnimatedProxy : IObservable<AvaloniaPropertyChange<T>>
+        {
+            private readonly AvaloniaPropertyListener<T> _owner;
+
+            public NonAnimatedProxy(AvaloniaPropertyListener<T> owner) => _owner = owner;
+
+            public IDisposable Subscribe(IObserver<AvaloniaPropertyChange<T>> observer)
+            {
+                return _owner.Subscribe(observer, false);
+            }
+        }
+
         private class Styled : AvaloniaPropertyListener<T>
         {
-            public Styled(IAvaloniaObject owner, StyledPropertyBase<T> property)
+            private readonly StyledPropertyBase<T> _property;
+
+            public Styled(AvaloniaObject owner, StyledPropertyBase<T> property)
                 : base(owner)
             {
-                Property = property ?? throw new ArgumentNullException(nameof(property));
+                _property = property ?? throw new ArgumentNullException(nameof(property));
             }
 
-            public override AvaloniaProperty<T> Property { get; }
-            protected override T GetValue(IAvaloniaObject owner) => owner.GetValue(Property);
+            public override AvaloniaProperty<T> Property => _property;
+            
+            protected override T GetValue(AvaloniaObject owner, bool includeAnimations)
+            {
+                return includeAnimations ?
+                    owner.GetValue(_property) :
+                    owner.GetAnimationBaseValue(_property);
+            }
         }
 
         private class Direct : AvaloniaPropertyListener<T>
         {
-            public Direct(IAvaloniaObject owner, DirectPropertyBase<T> property)
+            private readonly DirectPropertyBase<T> _property;
+
+            public Direct(AvaloniaObject owner, DirectPropertyBase<T> property)
                 : base(owner)
             {
-                Property = property ?? throw new ArgumentNullException(nameof(property));
+                _property = property ?? throw new ArgumentNullException(nameof(property));
             }
 
-            public override AvaloniaProperty<T> Property { get; }
-            protected override T GetValue(IAvaloniaObject owner) => owner.GetValue(Property);
+            public override AvaloniaProperty<T> Property => _property;
+
+            protected override T GetValue(AvaloniaObject owner, bool includeAnimations)
+            {
+                return owner.GetValue(_property);
+            }
         }
     }
 }
