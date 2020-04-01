@@ -656,15 +656,8 @@ namespace Avalonia
         /// <summary>
         /// Called when a avalonia property changes on the object.
         /// </summary>
-        /// <param name="property">The property whose value has changed.</param>
-        /// <param name="oldValue">The old value of the property.</param>
-        /// <param name="newValue">The new value of the property.</param>
-        /// <param name="priority">The priority of the new value.</param>
-        protected virtual void OnPropertyChanged<T>(
-            AvaloniaProperty<T> property,
-            Optional<T> oldValue,
-            BindingValue<T> newValue,
-            BindingPriority priority)
+        /// <param name="change">The property change details.</param>
+        protected virtual void OnPropertyChanged<T>(in AvaloniaPropertyChange<T> change)
         {
         }
 
@@ -774,7 +767,7 @@ namespace Avalonia
                         change.Priority);
                 }
 
-                OnPropertyChanged(change.Property, change.OldValue, change.NewValue, change.Priority);
+                OnPropertyChanged(change);
 
                 if (hasChanged)
                 {
