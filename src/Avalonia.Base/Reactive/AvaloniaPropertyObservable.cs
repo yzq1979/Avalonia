@@ -8,7 +8,7 @@ using Avalonia.Threading;
 
 namespace Avalonia.Reactive
 {
-    internal abstract class AvaloniaPropertyListener<T> :
+    internal abstract class AvaloniaPropertyObservable<T> :
         IObservable<AvaloniaPropertyChange<T>>,
         IObservable<BindingValue<T>>,
         IObservable<T>,
@@ -20,7 +20,7 @@ namespace Avalonia.Reactive
         private object? _observer;
         private bool _isSignalling;
 
-        private AvaloniaPropertyListener(AvaloniaObject owner)
+        private AvaloniaPropertyObservable(AvaloniaObject owner)
         {
             owner = owner ?? throw new ArgumentNullException(nameof(owner));
             _owner = new WeakReference<AvaloniaObject>(owner);
@@ -45,12 +45,12 @@ namespace Avalonia.Reactive
 
         public IObservable<AvaloniaPropertyChange<T>> NonAnimated => _nonAnimated ??= new NonAnimatedProxy(this);
 
-        public static AvaloniaPropertyListener<T> Create(AvaloniaObject o, StyledPropertyBase<T> property)
+        public static AvaloniaPropertyObservable<T> Create(AvaloniaObject o, StyledPropertyBase<T> property)
         {
             return new Styled(o, property);
         }
 
-        public static AvaloniaPropertyListener<T> Create(AvaloniaObject o, DirectPropertyBase<T> property)
+        public static AvaloniaPropertyObservable<T> Create(AvaloniaObject o, DirectPropertyBase<T> property)
         {
             return new Direct(o, property);
         }
@@ -260,10 +260,10 @@ namespace Avalonia.Reactive
 
         private class Disposable : IDisposable
         {
-            private readonly AvaloniaPropertyListener<T> _owner;
+            private readonly AvaloniaPropertyObservable<T> _owner;
             private readonly object _observer;
 
-            public Disposable(AvaloniaPropertyListener<T> owner, object observer)
+            public Disposable(AvaloniaPropertyObservable<T> owner, object observer)
             {
                 _owner = owner;
                 _observer = observer;
@@ -277,9 +277,9 @@ namespace Avalonia.Reactive
 
         private class NonAnimatedProxy : IObservable<AvaloniaPropertyChange<T>>
         {
-            private readonly AvaloniaPropertyListener<T> _owner;
+            private readonly AvaloniaPropertyObservable<T> _owner;
 
-            public NonAnimatedProxy(AvaloniaPropertyListener<T> owner) => _owner = owner;
+            public NonAnimatedProxy(AvaloniaPropertyObservable<T> owner) => _owner = owner;
 
             public IDisposable Subscribe(IObserver<AvaloniaPropertyChange<T>> observer)
             {
@@ -287,7 +287,7 @@ namespace Avalonia.Reactive
             }
         }
 
-        private class Styled : AvaloniaPropertyListener<T>
+        private class Styled : AvaloniaPropertyObservable<T>
         {
             private readonly StyledPropertyBase<T> _property;
 
@@ -307,7 +307,7 @@ namespace Avalonia.Reactive
             }
         }
 
-        private class Direct : AvaloniaPropertyListener<T>
+        private class Direct : AvaloniaPropertyObservable<T>
         {
             private readonly DirectPropertyBase<T> _property;
 

@@ -326,10 +326,10 @@ namespace Avalonia
 
             if (_listeners.TryGetValue(property, out var existing))
             {
-                return ((AvaloniaPropertyListener<T>)existing).Get(includeAnimations);
+                return ((AvaloniaPropertyObservable<T>)existing).Get(includeAnimations);
             }
 
-            var listener = AvaloniaPropertyListener<T>.Create(this, property);
+            var listener = AvaloniaPropertyObservable<T>.Create(this, property);
             _listeners.AddValue(property, listener);
             return listener.Get(includeAnimations);
         }
@@ -353,10 +353,10 @@ namespace Avalonia
 
             if (_listeners.TryGetValue(property, out var existing))
             {
-                return ((AvaloniaPropertyListener<T>)existing).Get(includeAnimations);
+                return ((AvaloniaPropertyObservable<T>)existing).Get(includeAnimations);
             }
 
-            var listener = AvaloniaPropertyListener<T>.Create(this, property);
+            var listener = AvaloniaPropertyObservable<T>.Create(this, property);
             _listeners.AddValue(property, listener);
             return listener.Get(includeAnimations);
         }
@@ -776,7 +776,7 @@ namespace Avalonia
 
                 if (_listeners != null && _listeners.TryGetValue(change.Property, out var listener))
                 {
-                    ((AvaloniaPropertyListener<T>)listener).Signal(change);
+                    ((AvaloniaPropertyObservable<T>)listener).Signal(change);
                 }
 
                 _propertyChanged?.Invoke(this, e);
