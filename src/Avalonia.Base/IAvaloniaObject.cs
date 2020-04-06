@@ -52,6 +52,24 @@ namespace Avalonia
             bool includeAnimations = true);
 
         /// <summary>
+        /// Adds a listener for all <see cref="AvaloniaProperty"/> value changes.
+        /// </summary>
+        /// <param name="listener">The listener.</param>
+        /// <param name="includeAnimations">
+        /// Whether to include property changes caused by animations.
+        /// </param>
+        void AddListener(
+            IAvaloniaPropertyListener listener,
+            bool includeAnimations = true);
+
+        /// <summary>
+        /// Removes a listener added by
+        /// <see cref="AddListener(IAvaloniaPropertyListener, bool)"/>.
+        /// </summary>
+        /// <param name="listener">The listener.</param>
+        void RemoveListener(IAvaloniaPropertyListener listener);
+
+        /// <summary>
         /// Gets a <see cref="AvaloniaProperty"/> value.
         /// </summary>
         /// <typeparam name="T">The type of the property.</typeparam>
